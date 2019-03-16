@@ -1,4 +1,4 @@
-import tkinter as tk
+﻿import tkinter as tk
 from tkinter.filedialog import *
 from tkinter import ttk
 import predict
@@ -6,7 +6,6 @@ import cv2
 from PIL import Image, ImageTk
 import threading
 import time
-
 
 
 class Surface(ttk.Frame):
@@ -17,7 +16,7 @@ class Surface(ttk.Frame):
 	thread = None
 	thread_run = False
 	camera = None
-	color_transform = {"green":("绿牌","#55FF55"), "yello":("黄牌","#FFFF00"), "blue":("蓝牌","#6666FF")}
+	color_transform = {"green":("绿牌","#55FF55"), "yello":("黄牌","#FFFF00"), "blue":("蓝牌","#6666FF") ,"white":("白牌","#000000"), "black":("黑牌","#FFFFFF")}
 		
 	def __init__(self, win):
 		ttk.Frame.__init__(self, win)
@@ -37,6 +36,8 @@ class Surface(ttk.Frame):
 		from_vedio_ctl = ttk.Button(frame_right2, text="来自摄像头", width=20, command=self.from_vedio)
 		self.image_ctl = ttk.Label(frame_left)
 		self.image_ctl.pack(anchor="nw")
+		self.image_ctl_contour = ttk.Label(frame_left)
+		self.image_ctl_contour.pack(anchor="nw")
 		
 		self.roi_ctl = ttk.Label(frame_right1)
 		self.roi_ctl.grid(column=0, row=1, sticky=tk.W)
@@ -49,7 +50,7 @@ class Surface(ttk.Frame):
 		from_pic_ctl.pack(anchor="se", pady="5")
 		self.predictor = predict.CardPredictor()
 		self.predictor.train_svm()
-		
+	
 	def get_imgtk(self, img_bgr):
 		img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 		im = Image.fromarray(img)
@@ -107,6 +108,10 @@ class Surface(ttk.Frame):
 			img_bgr = predict.imreadex(self.pic_path)
 			self.imgtk = self.get_imgtk(img_bgr)
 			self.image_ctl.configure(image=self.imgtk)
+			find, contour_no,  img_contour=self.predictor.predict_contour(img_bgr)
+			cv2.imshow("edge4", img_contour)  ######
+			#cv2.waitKey()
+			#self.image_ctl_contour.configure(image=self.get_imgtk(img_contour))
 			r, roi, color = self.predictor.predict(img_bgr)
 			self.show_roi(r, roi, color)
 

@@ -4,6 +4,7 @@ from numpy.linalg import norm
 import sys
 import os
 import json
+import surface
 
 SZ = 20          #训练图片长宽
 MAX_WIDTH = 1000 #原始图片最大宽度
@@ -241,8 +242,7 @@ class CardPredictor:
 				if xr < j:
 					xr = j
 		return xl, xr, yh, yl
-		
-	def predict(self, car_pic):
+	def predict_contour(self, car_pic):
 		if type(car_pic) == type(""):
 			img = imreadex(car_pic)
 		else:
@@ -281,23 +281,85 @@ class CardPredictor:
 		print('len(contours)', len(contours))
 		#一一排除不是车牌的矩形区域
 		car_contours = []
+		find=False
 		for cnt in contours:
 			rect = cv2.minAreaRect(cnt)
 			area_width, area_height = rect[1]
 			if area_width < area_height:
 				area_width, area_height = area_height, area_width
 			wh_ratio = area_width / area_height
-			#print(wh_ratio)
+			
 			#要求矩形区域长宽比在2到5.5之间，2到5.5是车牌的长宽比，其余的矩形排除
-			if wh_ratio > 2 and wh_ratio < 5.5:
+			print('wh_ratio=',wh_ratio)
+			if wh_ratio > 2  wh_ratio < 6:
+				find=True
 				car_contours.append(rect)
 				box = cv2.boxPoints(rect)
 				box = np.int0(box)
-				#oldimg = cv2.drawContours(oldimg, [box], 0, (0, 0, 255), 2)
+				
+				oldimg = cv2.drawContours(oldimg, [box], 0, (0, 0, 255), 2)
+				#cv2.imshow("edge4", oldimg)
+				#print(rect)
+		return find, len(car_contours), oldimg		
+
+	def predict(self, car_pic):
+		if type(car_pic) == type(""):
+			img = imreadex(car_pic)
+		else:
+			img = car_pic
+		pic_hight, pic_width = img.shape[:2]
+
+		if pic_width > MAX_WIDTH:
+			resize_rate = MAX_WIDTH / pic_width
+			img = cv2.resize(img, (MAX_WIDTH, int(pic_hight*resize_rate)), interpolation=cv2.INTER_AREA)
+		
+		blur = self.cfg["blur"]
+		#高斯去噪
+		if blur > 0:
+			img = cv2.GaussianBlur(img, (blur, blur), 0)#图片分辨率调整
+		oldimg = img
+		img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		#equ = cv2.equalizeHist(img)
+		#img = np.hstack((img, equ))
+		#去掉图像中不会是车牌的区域
+		kernel = np.ones((20, 20), np.uint8)
+		img_opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
+		img_opening = cv2.addWeighted(img, 1, img_opening, -1, 0);
+
+		#找到图像边缘
+		ret, img_thresh = cv2.threshold(img_opening, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+		img_edge = cv2.Canny(img_thresh, 100, 200)
+		#使用开运算和闭运算让图像边缘成为一个整体
+		kernel = np.ones((self.cfg["morphologyr"], self.cfg["morphologyc"]), np.uint8)
+		img_edge1 = cv2.morphologyEx(img_edge, cv2.MORPH_CLOSE, kernel)
+		img_edge2 = cv2.morphologyEx(img_edge1, cv2.MORPH_OPEN, kernel)
+
+		#查找图像边缘整体形成的矩形区域，可能有很多，车牌就在其中一个矩形区域中
+		# timmy changed :   deleted this of nextline which leads to error::::          image, 
+		contours, hierarchy = cv2.findContours(img_edge2, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+		contours = [cnt for cnt in contours if cv2.contourArea(cnt) > Min_Area]
+		print('len(contours)', len(contours))
+		#一一排除不是车牌的矩形区域
+		car_contours = []
+		for cnt in contours:
+			rect = cv2.minAreaRect(cnt)
+			area_width, area_height = rect[1]
+			if area_width < area_height:
+				area_width, area_height = area_height, area_width
+			wh_ratio = area_width / area_height
+			
+			#要求矩形区域长宽比在2到5.5之间，2到5.5是车牌的长宽比，其余的矩形排除
+			print('wh_ratio=',wh_ratio)
+			if wh_ratio > 2 : #Timmy ###             and wh_ratio < 5.5:
+				car_contours.append(rect)
+				box = cv2.boxPoints(rect)
+				box = np.int0(box)
+				
+				oldimg = cv2.drawContours(oldimg, [box], 0, (0, 0, 255), 2)
 				#cv2.imshow("edge4", oldimg)
 				#print(rect)
 
-		print(len(car_contours))
+		print('contours no=',len(car_contours))
 
 		print("精确定位")
 		card_imgs = []
@@ -377,25 +439,30 @@ class CardPredictor:
 					elif 0 < H <180 and 0 < S < 43 and 221 < V < 225:
 						white += 1
 			color = "no"
-
+			print('yellow=',yello)
+			print('green=',green)
+			print('blue=',blue)
+			print('white=',white)
+			print('b+w=',black+white)
+			print('card_img_count=',card_img_count)
 			limit1 = limit2 = 0
-			if yello*2 >= card_img_count:
+			if yello*2.2 >= card_img_count:
 				color = "yello"
 				limit1 = 11
 				limit2 = 34#有的图片有色偏偏绿
-			elif green*2 >= card_img_count:
+			elif green*2.2 >= card_img_count:
 				color = "green"
 				limit1 = 35
 				limit2 = 99
-			elif blue*2 >= card_img_count:
+			elif blue*2.2 >= card_img_count:
 				color = "blue"
 				limit1 = 100
 				limit2 = 124#有的图片有色偏偏紫
-			elif black + white >= card_img_count*0.7:#TODO
+			elif black + white >= card_img_count*0.25:#TODO
 				color = "bw"
 			print(color)
 			colors.append(color)
-			print(blue, green, yello, black, white, card_img_count)
+			print(blue, green, yello, black, white, card_img_count) #Timmy
 			#cv2.imshow("color", card_img)
 			#cv2.waitKey(0)
 			if limit1 == 0:
@@ -428,17 +495,18 @@ class CardPredictor:
 					xl = 0
 					xr = col_num
 			card_imgs[card_index] = card_img[yl:yh, xl:xr] if color != "green" or yl < (yh-yl)//4 else card_img[yl-(yh-yl)//4:yh, xl:xr]
+			print('card_index:',card_index);
 		#以上为车牌定位
 		#以下为识别车牌中的字符
 		predict_result = []
 		roi = None
 		card_color = None
 		for i, color in enumerate(colors):
-			if color in ("blue", "yello", "green"):
+			if color in ("blue", "yello", "green","black","white"): 				#timmy add black white
 				card_img = card_imgs[i]
 				gray_img = cv2.cvtColor(card_img, cv2.COLOR_BGR2GRAY)
 				#黄、绿车牌字符比背景暗、与蓝车牌刚好相反，所以黄、绿车牌需要反向
-				if color == "green" or color == "yello":
+				if color == "green" or color == "yello" or color=="black":
 					gray_img = cv2.bitwise_not(gray_img)
 				ret, gray_img = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 				#查找水平直方图波峰
@@ -467,9 +535,9 @@ class CardPredictor:
 				#for wave in wave_peaks:
 				#	cv2.line(card_img, pt1=(wave[0], 5), pt2=(wave[1], 5), color=(0, 0, 255), thickness=2) 
 				#车牌字符数应大于6
-				if len(wave_peaks) <= 6:
+				if len(wave_peaks) <= 2:  #timmy 本来是 <=6
 					print("peak less 1:", len(wave_peaks))
-					continue
+					continue		
 				
 				wave = max(wave_peaks, key=lambda x:x[1]-x[0])
 				max_wave_dis = wave[1] - wave[0]
@@ -490,15 +558,16 @@ class CardPredictor:
 					wave_peaks.insert(0, wave)
 				
 				#去除车牌上的分隔点
-				point = wave_peaks[2]
-				if point[1] - point[0] < max_wave_dis/3:
-					point_img = gray_img[:,point[0]:point[1]]
-					if np.mean(point_img) < 255/5:
-						wave_peaks.pop(2)
+				if len(wave_peaks) >= 3:
+					point = wave_peaks[2]
+					if point[1] - point[0] < max_wave_dis/3:
+						point_img = gray_img[:,point[0]:point[1]]
+						if np.mean(point_img) < 255/5:
+							wave_peaks.pop(2)
 				
-				if len(wave_peaks) <= 6:
+				if len(wave_peaks) <= 2:    #timmy change from <=6
 					print("peak less 2:", len(wave_peaks))
-					continue
+					continue   
 				part_cards = seperate_card(gray_img, wave_peaks)
 				for i, part_card in enumerate(part_cards):
 					#可能是固定车牌的铆钉
