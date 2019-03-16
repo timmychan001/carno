@@ -16,3 +16,5 @@ License Plate Recognition For Car With Python And OpenCV
 ##### 界面效果：
 ![](https://github.com/wzh191920/License-Plate-Recognition/blob/master/Screenshots/3.png)
 ![](https://github.com/wzh191920/License-Plate-Recognition/blob/master/Screenshots/5.png)
+
+这个版本是Timmy改来练习的，原版在   wzh191920/License-Plate-Recognition.git 取哦
